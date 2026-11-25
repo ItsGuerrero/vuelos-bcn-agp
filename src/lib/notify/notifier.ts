@@ -38,7 +38,9 @@ export async function notify(db: SupabaseClient, n: NotifyInput): Promise<{ sent
 
   let sent = 0;
   const errors: string[] = [];
-  if (telegramConfigured()) {
+  const { data: settings } = await db.from("settings").select("notify_channels").eq("couple_id", n.coupleId).maybeSingle();
+  const telegramOn = settings?.notify_channels?.telegram !== false;
+  if (telegramConfigured() && telegramOn) {
     for (const r of recipients) {
       try {
         await sendMessage(r.chat, n.message.text, n.message.buttons);
@@ -62,5 +64,6 @@ export async function notify(db: SupabaseClient, n: NotifyInput): Promise<{ sent
   });
 
   if (errors.length && !sent) throw new Error(errors[0]);
+  if (!telegramOn) return { sent: 0, skipped: "Telegram desactivado en Ajustes" };
   return { sent, skipped: recipients.length ? undefined : "nadie tiene Telegram enlazado" };
 }

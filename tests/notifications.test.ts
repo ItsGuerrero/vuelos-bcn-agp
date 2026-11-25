@@ -77,3 +77,22 @@ describe("destinatarios", () => {
       { id: "javier", chat: 111 },
     ]));
 });
+
+import { dailySummaryMessage } from "../src/lib/notify/messages";
+
+describe("resumen diario", () => {
+  it("lista los viajes con variación, mínimo y recomendación", () => {
+    const m = dailySummaryMessage({
+      trips: [
+        { id: "a", origin: "BCN", destination: "AGP", outbound_date: "2027-01-01", return_date: "2027-01-07", current: 96, previous: 110, lowest: 96, recommendation: "Comprar ya" },
+      ],
+      activeSales: 1,
+      appUrl: "https://app",
+    });
+    expect(m.text).toContain("BCN⇄AGP 1–7 ene</a>: 96 € ▼14 € (mín. 96 €) · Comprar ya");
+    expect(m.text).toContain("🔥 Hay 1 oferta activa");
+  });
+  it("sin viajes lo dice", () => {
+    expect(dailySummaryMessage({ trips: [], activeSales: 0, appUrl: "x" }).text).toContain("No tenéis seguimientos activos.");
+  });
+});

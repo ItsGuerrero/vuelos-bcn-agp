@@ -7,13 +7,13 @@ const ITEMS = [
   { href: "/", label: "Viajes", icon: "✈️", match: (p: string) => p === "/" || (p.startsWith("/seguimientos/") && !p.endsWith("/nuevo")) },
   { href: "/ofertas", label: "Ofertas", icon: "🔥", match: (p: string) => p.startsWith("/ofertas") },
   { href: "/seguimientos/nuevo", label: "Nuevo", icon: "＋", match: (p: string) => p === "/seguimientos/nuevo" },
-  { href: "/cuenta", label: "Cuenta", icon: "👤", match: (p: string) => p.startsWith("/cuenta") },
+  { href: "/cuenta", label: "Cuenta", icon: "👤", match: (p: string) => p.startsWith("/cuenta") || p.startsWith("/ajustes") },
 ];
 
 /** Barra de navegación inferior (móvil primero). */
 export function BottomNav() {
   const path = usePathname();
-  if (path.startsWith("/login") || path.startsWith("/pareja")) return null;
+  if (path.startsWith("/login") || path.startsWith("/pareja") || path === "/offline") return null;
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
       <ul className="mx-auto grid max-w-lg grid-cols-4">

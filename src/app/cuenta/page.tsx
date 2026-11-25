@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/supabase/server";
@@ -41,6 +42,13 @@ async function Account() {
 
   return (
     <div className="space-y-4">
+      <Link href="/ajustes" className="card flex items-center justify-between">
+        <span>
+          <span className="font-semibold">⚙️ Ajustes de la pareja</span>
+          <span className="block text-xs text-muted">Equipaje, avisos, detector de ofertas, horas de escaneo</span>
+        </span>
+        <span className="text-xl text-muted">›</span>
+      </Link>
       <TelegramCard
         linked={Boolean(me?.telegram_chat_id)}
         partnerLinked={partner ? Boolean(partner.telegram_chat_id) : null}

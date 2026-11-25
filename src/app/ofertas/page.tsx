@@ -67,6 +67,11 @@ async function Offers() {
 
   return (
     <div className="space-y-5">
+      <p className="text-right text-xs">
+        <Link href="/ajustes" className="text-accent">
+          Ajustar el detector ›
+        </Link>
+      </p>
       {(warm.VY || warm.FR) && (
         <div className="card border-amber-300 bg-amber-50 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
           <b>Calentando el detector.</b> Llevamos {scansSoFar} {scansSoFar === 1 ? "escaneo" : "escaneos"} de la ruta. La detección de

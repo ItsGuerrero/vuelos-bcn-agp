@@ -35,8 +35,20 @@ async function TrackerList() {
   const past = trackers.filter((t) => t.status === "purchased" || t.status === "expired");
   const spent = past.reduce((s, t) => s + Number(t.purchased_price ?? 0), 0);
 
+  const lastTrip = [...trackers].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+
   return (
     <div className="space-y-6">
+      {lastTrip && (
+        <div className="flex gap-2 overflow-x-auto text-sm">
+          <Link href={`/seguimientos/nuevo?from=${lastTrip.id}`} className="chip whitespace-nowrap py-1.5">
+            ⟳ Repetir el último viaje ({lastTrip.origin}→{lastTrip.destination})
+          </Link>
+          <Link href={`/seguimientos/nuevo?from=${lastTrip.id}&invert=1`} className="chip whitespace-nowrap py-1.5">
+            ⇄ Al revés ({lastTrip.destination}→{lastTrip.origin})
+          </Link>
+        </div>
+      )}
       {active.length === 0 ? (
         <div className="card space-y-3 text-center">
           <p className="text-3xl">🧳</p>

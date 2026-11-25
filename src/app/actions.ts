@@ -266,3 +266,82 @@ export async function muteTracker(id: string, days: number) {
   await supabase.from("trackers").update({ muted_until: until }).eq("id", id);
   revalidatePath(`/seguimientos/${id}`);
 }
+
+// ---------------------------------------------------------------------
+// Ajustes de la pareja
+// ---------------------------------------------------------------------
+const num = (min: number, max: number) => z.coerce.number().min(min).max(max);
+const settingsSchema = z.object({
+  vy_label: z.string().max(40),
+  vy_price: num(0, 200),
+  fr_label: z.string().max(40),
+  fr_price: num(0, 200),
+  new_low_min_drop_eur: num(0, 100),
+  new_low_min_drop_pct: num(0, 50),
+  telegram: z.boolean(),
+  daily_summary: z.boolean(),
+  flash_enabled_anomaly: z.boolean(),
+  flash_enabled_threshold: z.boolean(),
+  flash_min_dates_pct: num(5, 100),
+  flash_min_drop_pct: num(5, 90),
+  flash_threshold_price: num(5, 200),
+  flash_horizon_days: z.coerce.number().int().refine((v) => [30, 60, 90].includes(v), "Horizonte no válido"),
+  scan_1: z.string().regex(/^([01]\d|2[0-3]):00$/, "Hora de escaneo no válida"),
+  scan_2: z.string().regex(/^([01]\d|2[0-3]):00$/).or(z.literal("")),
+});
+
+export async function saveSettings(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const s = await requireCouple();
+  const parsed = settingsSchema.safeParse({
+    vy_label: str(fd, "vy_label"),
+    vy_price: str(fd, "vy_price").replace(",", ".") || 0,
+    fr_label: str(fd, "fr_label"),
+    fr_price: str(fd, "fr_price").replace(",", ".") || 0,
+    new_low_min_drop_eur: str(fd, "new_low_min_drop_eur").replace(",", ".") || 0,
+    new_low_min_drop_pct: str(fd, "new_low_min_drop_pct").replace(",", ".") || 0,
+    telegram: fd.get("telegram") === "on",
+    daily_summary: fd.get("daily_summary") === "on",
+    flash_enabled_anomaly: fd.get("flash_enabled_anomaly") === "on",
+    flash_enabled_threshold: fd.get("flash_enabled_threshold") === "on",
+    flash_min_dates_pct: str(fd, "flash_min_dates_pct"),
+    flash_min_drop_pct: str(fd, "flash_min_drop_pct"),
+    flash_threshold_price: str(fd, "flash_threshold_price").replace(",", "."),
+    flash_horizon_days: str(fd, "flash_horizon_days"),
+    scan_1: str(fd, "scan_1"),
+    scan_2: str(fd, "scan_2"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Revisa los ajustes" };
+  const v = parsed.data;
+  const scanTimes = [...new Set([v.scan_1, v.scan_2].filter(Boolean))].sort();
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("settings")
+    .update({
+      baggage_by_airline: { VY: { label: v.vy_label || "Equipaje", price: v.vy_price }, FR: { label: v.fr_label || "Equipaje", price: v.fr_price } },
+      new_low_min_drop_eur: v.new_low_min_drop_eur,
+      new_low_min_drop_pct: v.new_low_min_drop_pct,
+      notify_channels: { telegram: v.telegram, push: false, email: false },
+      daily_summary: v.daily_summary,
+      flash_enabled_anomaly: v.flash_enabled_anomaly,
+      flash_enabled_threshold: v.flash_enabled_threshold,
+      flash_min_dates_pct: v.flash_min_dates_pct,
+      flash_min_drop_pct: v.flash_min_drop_pct,
+      flash_threshold_price: v.flash_threshold_price,
+      flash_horizon_days: v.flash_horizon_days,
+      flash_scan_times: scanTimes,
+    })
+    .eq("couple_id", s.coupleId);
+  if (error) return { error: error.message };
+  revalidatePath("/ajustes");
+  return { ok: "Ajustes guardados" };
+}
+
+export async function muteFlash(days: number) {
+  const s = await requireCouple();
+  const supabase = await createClient();
+  const until = days > 0 ? new Date(Date.now() + days * 86_400_000).toISOString() : null;
+  await supabase.from("settings").update({ flash_muted_until: until }).eq("couple_id", s.coupleId);
+  revalidatePath("/ajustes");
+  revalidatePath("/ofertas");
+}

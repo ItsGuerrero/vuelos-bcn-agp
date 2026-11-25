@@ -25,7 +25,8 @@ export async function proxy(request: NextRequest) {
   );
 
   const { data } = await supabase.auth.getClaims();
-  const isPublic = request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/auth");
+  const path = request.nextUrl.pathname;
+  const isPublic = path.startsWith("/login") || path.startsWith("/auth") || path === "/offline";
 
   if (!data?.claims && !isPublic) {
     const url = request.nextUrl.clone();
@@ -38,5 +39,5 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Todo salvo los procesos programados, estáticos e imágenes.
-  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon|apple-icon|manifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
+  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon|apple-icon|manifest|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|webmanifest)$).*)"],
 };

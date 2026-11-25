@@ -178,3 +178,33 @@ export function flashSaleMessage(opts: {
     ],
   };
 }
+
+// ---------------------------------------------------------------------
+// Resumen diario
+// ---------------------------------------------------------------------
+export interface SummaryTrip {
+  id: string;
+  origin: string;
+  destination: string;
+  outbound_date: string;
+  return_date: string | null;
+  current: number | null;
+  previous: number | null;
+  lowest: number | null;
+  recommendation: string | null;
+}
+
+export function dailySummaryMessage(opts: { trips: SummaryTrip[]; activeSales: number; appUrl: string }): TelegramMessage {
+  const lines = ["☀️ <b>Buenos días: así están vuestros vuelos</b>"];
+  if (!opts.trips.length) lines.push("No tenéis seguimientos activos.");
+  for (const t of opts.trips) {
+    const diff = t.current !== null && t.previous !== null ? Math.round((t.current - t.previous) * 100) / 100 : 0;
+    const arrow = diff < 0 ? ` ▼${eur(-diff)}` : diff > 0 ? ` ▲${eur(diff)}` : "";
+    const rec = t.recommendation ? ` · ${t.recommendation}` : "";
+    lines.push(
+      `• <a href="${opts.appUrl}/seguimientos/${t.id}">${t.origin}${t.return_date ? "⇄" : "→"}${t.destination} ${esc(rangoFechas(t.outbound_date, t.return_date))}</a>: ${eur(t.current)}${arrow} (mín. ${eur(t.lowest)})${esc(rec)}`,
+    );
+  }
+  if (opts.activeSales > 0) lines.push(`🔥 Hay ${opts.activeSales} ${opts.activeSales === 1 ? "oferta activa" : "ofertas activas"} en la ruta.`);
+  return { text: lines.join("\n"), buttons: [[{ text: "Abrir la app", url: opts.appUrl }]] };
+}

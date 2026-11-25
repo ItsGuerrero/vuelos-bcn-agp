@@ -7,6 +7,7 @@ import { serverEnv } from "../server/env";
 import { scanRoute } from "./scanRoute";
 import { checkDueTrackers } from "./checkTrackers";
 import { detectFlash } from "./detectFlash";
+import { sendDailySummaries } from "./dailySummary";
 
 /**
  * Se ejecuta cada hora (pg_cron → POST /api/jobs/tick).
@@ -57,6 +58,9 @@ export async function tick(db: SupabaseClient, force: { scan?: boolean; trackers
     out.trackers = await checkDueTrackers(db, { detailCallsAvailable: detail });
     out.trackerBudget = budget;
   }
+
+  // Resumen diario a las 9:00 (después de escanear y comprobar). El anti-duplicados evita repetirlo.
+  if (z.hour === 9) out.dailySummary = await sendDailySummaries(db);
 
   out.callsPerScan = serpCallsPerScan(horizonDays);
   return out;

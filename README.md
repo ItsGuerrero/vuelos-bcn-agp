@@ -2,7 +2,7 @@
 
 Rastreador de precios de **Vueling (VY)** y **Ryanair (FR)** entre Barcelona y Málaga, pensado para una pareja a distancia. Vigila los viajes que planeamos, guarda el histórico, detecta ofertas flash y avisa por Telegram. Nunca compra: solo enlaza a la web de la aerolínea.
 
-> Estado: **fase 5** — seguimientos, avisos por Telegram, detector de ofertas flash y predicción.
+> Estado: **las 6 fases completas** — seguimientos, avisos por Telegram, detector de ofertas flash, predicción, ajustes y app instalable (PWA).
 
 ## Arquitectura
 
@@ -126,6 +126,21 @@ curl -X POST https://TU-APP.vercel.app/api/jobs/smoke \
 
 Comprueba que Ryanair responde desde Vercel y cuántos días devuelve el calendario de Google en una llamada (gasta 2 búsquedas de SerpApi). Si el calendario devuelve menos de 90 días, ajusta `SERPAPI_CALENDAR_MAX_DAYS`.
 
+### 6. Instalar en el móvil (PWA)
+
+- **iPhone (Safari)**: abre la web → botón Compartir → «Añadir a pantalla de inicio».
+- **Android (Chrome)**: abre la web → menú ⋮ → «Instalar aplicación» (o «Añadir a pantalla de inicio»).
+
+La app no guarda precios en caché (deben ser siempre los últimos); sin conexión muestra un aviso y los procesos siguen funcionando en el servidor.
+
+## Uso diario
+
+- **Viajes**: seguimientos con precio actual, mínimo, variación y recomendación. Atajos para repetir el último viaje o hacerlo al revés.
+- **Detalle**: mejor combinación con enlaces de compra, «¿Bajará?», gráfica, matriz de fechas, alternativas, comprobaciones, «Comprobar ahora», «Ya lo compré», silenciar, editar, invertir, repetir.
+- **Ofertas**: ofertas activas, mapa de calor de 90 días por sentido e historial.
+- **Cuenta → Ajustes**: equipaje por aerolínea, Telegram on/off, resumen diario (9:00), umbral de nuevo mínimo, umbrales del detector, precio chollo, días vigilados, horas de escaneo y silenciar ofertas.
+- **Telegram**: avisos `new_low`, `target_price`, `rise_risk`, `flash_sale` y `daily_summary`; comandos `/viajes` y `/desconectar`.
+
 ## Desarrollo
 
 ```bash
@@ -143,4 +158,4 @@ npm run typecheck
 3. ✅ Avisos por Telegram (`new_low`, `target_price`).
 4. ✅ Detector de ofertas flash, aviso `flash_sale` y pantalla "Ofertas".
 5. ✅ Predicción (heurística) y aviso `rise_risk`.
-6. PWA, ajustes y retoques finales.
+6. ✅ PWA, ajustes y retoques finales.
