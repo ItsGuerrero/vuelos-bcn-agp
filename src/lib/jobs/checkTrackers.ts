@@ -1,11 +1,16 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Airline, Airport, BaggageByAirline, Flight, PriceInsights, TimeFilters } from "../types";
+import type { Airline, Airport, BaggageByAirline, Flight, TimeFilters } from "../types";
 import { addDays, nowInZone } from "../core/dates";
 import { bestCombinations, buildDateMatrix, type Combo, type ComboOptions } from "../core/combos";
 import { evaluateNewLow } from "../core/newLow";
 import { evaluateTarget } from "../core/target";
-import { newLowMessage, targetPriceMessage } from "../notify/messages";
+import { newLowMessage, riseRiskMessage, targetPriceMessage } from "../notify/messages";
+import { predict, predictionLine, type Prediction } from "../core/predict";
+import { buildPredictionInput, freshInsight, type LegInsights, type PrevCheck } from "../core/predictionInputs";
+import type { BaselineRow } from "../core/flash";
+import { AEROLINEA } from "../format";
+import { loadRouteData } from "./detectFlash";
 import { notify } from "../notify/notifier";
 import { appUrl } from "../server/env";
 import { isExpired, nextCheckAt } from "../core/schedule";
@@ -102,6 +107,18 @@ export async function checkDueTrackers(db: SupabaseClient, opts: { maxTrackers?:
   const serp = serpApi(db, "trackers");
   const results: Array<Record<string, unknown>> = [];
 
+  // Datos para la predicción: referencias de la ruta (una vez por ejecución) y ofertas activas.
+  let baselineRows: BaselineRow[] | null = null;
+  const getBaselines = async () => {
+    if (baselineRows === null) baselineRows = await loadRouteData(db).then((r) => r.baselineRows).catch(() => []);
+    return baselineRows;
+  };
+  const { data: activeSales } = await db
+    .from("flash_sales")
+    .select("couple_id, airline, items")
+    .eq("status", "active")
+    .in("couple_id", coupleIds);
+
   for (const t of (trackers ?? []) as TrackerRow[]) {
     try {
       if (isExpired(today, t.outbound_date)) {
@@ -131,6 +148,13 @@ export async function checkDueTrackers(db: SupabaseClient, opts: { maxTrackers?:
       const byLeg: Record<"outbound" | "return", Record<string, Flight[]>> = { outbound: {}, return: {} };
       const providers = new Set<string>();
       const errors: Array<{ where: string; message: string }> = [];
+      const { data: prevData } = await db
+        .from("price_checks")
+        .select("checked_at, best_total, insights")
+        .eq("tracker_id", t.id)
+        .gte("checked_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
+        .order("checked_at");
+      const previous = (prevData ?? []) as PrevCheck[];
 
       for (const l of legs) {
         const vy = await vuelingFromScans(db, l.origin, l.dest, l.dates).catch((e) => {
@@ -165,41 +189,80 @@ export async function checkDueTrackers(db: SupabaseClient, opts: { maxTrackers?:
       };
       let combos: Combo[] = combosFor();
 
-      // Búsqueda de detalle con SerpApi solo si la mejor combinación usa un precio
-      // de calendario de Vueling (sin hora ni número de vuelo) o hay filtro horario.
-      const insights: Partial<Record<"outbound" | "return", PriceInsights | null>> = {};
+      // Búsquedas de detalle con SerpApi (presupuesto limitado), por prioridad:
+      //  1. la mejor combinación usa un precio de calendario de Vueling (sin hora ni número de vuelo);
+      //  2. hay filtro horario (los precios de calendario no lo garantizan);
+      //  3. falta un price_insights reciente (< 24 h) de un trayecto de la mejor combinación.
+      // Sin filtro de aerolínea: así Google devuelve price_insights (el parser ya se queda con VY y FR directos).
+      const insights: LegInsights = {};
       if (serp && detailLeft > 0) {
-        const best = combos[0];
-        const targets: Array<{ leg: "outbound" | "return"; date: string }> = [];
-        if (best?.outbound.fromCalendar) targets.push({ leg: "outbound", date: best.outbound.date });
-        if (best?.return?.fromCalendar) targets.push({ leg: "return", date: best.return.date });
-        // Con filtro horario los precios de calendario se descartan: miramos Vueling en las fechas centrales.
-        const hasFilters = Boolean(t.time_filters?.outbound || t.time_filters?.return);
-        if (!targets.length && hasFilters) {
-          targets.push({ leg: "outbound", date: t.outbound_date });
-          if (t.return_date) targets.push({ leg: "return", date: t.return_date });
-        }
-        for (const target of targets) {
-          if (detailLeft <= 0) break;
-          const l = legs.find((x) => x.leg === target.leg)!;
+        const done = new Set<string>();
+        const runDetail = async (leg: "outbound" | "return", date: string) => {
+          const k = `${leg}|${date}`;
+          if (done.has(k) || detailLeft <= 0) return;
+          done.add(k);
+          const l = legs.find((x) => x.leg === leg)!;
           try {
             detailLeft--;
-            const r = await serp.searchOneWayDetailed(l.origin, l.dest, target.date, 1);
-            // Añadimos los vuelos de Vueling con detalle (Ryanair ya lo tenemos de su web).
+            const r = await serp.searchOneWayDetailed(l.origin, l.dest, date, 1, { airlines: null, nonstop: true });
             const vyDetailed = r.flights.filter((f) => f.airline === "VY");
-            byLeg[target.leg][target.date] = [...(byLeg[target.leg][target.date] ?? []), ...vyDetailed];
-            insights[target.leg] = r.insights;
+            byLeg[leg][date] = [...(byLeg[leg][date] ?? []), ...vyDetailed];
+            insights[leg] = r.insights ? { ...r.insights, date } : null;
             providers.add("serpapi");
           } catch (e) {
-            errors.push({ where: `SerpApi detalle ${target.leg} ${target.date}`, message: e instanceof Error ? e.message : String(e) });
+            errors.push({ where: `SerpApi detalle ${leg} ${date}`, message: e instanceof Error ? e.message : String(e) });
           }
+        };
+
+        let best = combos[0];
+        if (best?.outbound.fromCalendar) await runDetail("outbound", best.outbound.date);
+        if (best?.return?.fromCalendar) await runDetail("return", best.return.date);
+        if (!done.size && (t.time_filters?.outbound || t.time_filters?.return)) {
+          await runDetail("outbound", t.outbound_date);
+          if (t.return_date) await runDetail("return", t.return_date);
         }
-        if (targets.length) combos = combosFor();
+        if (done.size) combos = combosFor();
+        best = combos[0];
+        if (best) {
+          const legsOfBest = [
+            { leg: "outbound" as const, date: best.outbound.date },
+            ...(best.return ? [{ leg: "return" as const, date: best.return.date }] : []),
+          ];
+          for (const x of legsOfBest) {
+            if (!freshInsight(insights, previous, x.leg, x.date, 24)) await runDetail(x.leg, x.date);
+          }
+          combos = combosFor();
+        }
       }
 
       const matrix =
         t.flex_days > 0 && t.return_date ? buildDateMatrix(byLeg.outbound, byLeg.return, comboOpts) : null;
       const best = combos[0] ?? null;
+
+      // Predicción "¿bajará?" (heurística transparente).
+      let prediction: Prediction | null = null;
+      if (best) {
+        const comboKeys = [
+          `${t.origin}-${t.destination}|${best.outbound.date}`,
+          ...(best.return ? [`${t.destination}-${t.origin}|${best.return.date}`] : []),
+        ];
+        const sale = (activeSales ?? []).find(
+          (x) =>
+            x.couple_id === t.couple_id &&
+            (x.items as Array<{ direction: string; date: string }>).some((i) => comboKeys.includes(`${i.direction}|${i.date}`)),
+        );
+        prediction = predict(
+          buildPredictionInput({
+            today,
+            tracker: t,
+            best,
+            insights,
+            previous,
+            baselineRows: await getBaselines(),
+            activeFlashSale: sale ? AEROLINEA[sale.airline as Airline] : null,
+          }),
+        );
+      }
 
       const { data: check, error: checkErr } = await db
         .from("price_checks")
@@ -212,6 +275,7 @@ export async function checkDueTrackers(db: SupabaseClient, opts: { maxTrackers?:
           alternatives: combos.slice(1, 4),
           date_matrix: matrix,
           insights: Object.keys(insights).length ? insights : null,
+          prediction,
           errors: errors.length ? errors : null,
         })
         .select("id")
@@ -265,13 +329,23 @@ export async function checkDueTrackers(db: SupabaseClient, opts: { maxTrackers?:
         // Avisos (si el seguimiento no está silenciado). Si coinciden los dos, se manda solo el de objetivo.
         const muted = t.muted_until !== null && new Date(t.muted_until) > new Date();
         const info = { ...t, target_price: t.target_price === null ? null : Number(t.target_price) };
+        const predLine = prediction ? predictionLine(prediction) : undefined;
+        // Riesgo de subida: estamos cerca del mínimo y la estimación dice que no va a bajar.
+        const riseRisk =
+          !newLow.isFirstCheck &&
+          prediction !== null &&
+          prediction.recommendation === "Comprar ya" &&
+          prediction.probability <= 25 &&
+          best.total <= newLow.lowest * 1.05;
         const message = target.notify
-          ? targetPriceMessage({ tracker: info, combo: best, total: best.total, isNewLow: newLow.isHistoricLow && !newLow.isFirstCheck, appUrl: appUrl() })
+          ? targetPriceMessage({ tracker: info, combo: best, total: best.total, isNewLow: newLow.isHistoricLow && !newLow.isFirstCheck, appUrl: appUrl(), prediction: predLine })
           : newLow.notify
-            ? newLowMessage({ tracker: info, combo: best, total: best.total, drop: newLow.drop, appUrl: appUrl() })
-            : null;
+            ? newLowMessage({ tracker: info, combo: best, total: best.total, drop: newLow.drop, appUrl: appUrl(), prediction: predLine })
+            : riseRisk && prediction
+              ? riseRiskMessage({ tracker: info, combo: best, total: best.total, lowest: newLow.lowest, appUrl: appUrl(), prediction })
+              : null;
         if (message && !muted) {
-          const type = target.notify ? "target_price" : "new_low";
+          const type = target.notify ? "target_price" : newLow.notify ? "new_low" : "rise_risk";
           try {
             await notify(db, {
               coupleId: t.couple_id,
@@ -279,7 +353,9 @@ export async function checkDueTrackers(db: SupabaseClient, opts: { maxTrackers?:
               message,
               travelerId: t.traveler_id,
               trackerId: t.id,
-              dedupeKey: `${type}:${t.id}:${best.total}`,
+              // El riesgo de subida se avisa como mucho una vez cada 3 días por seguimiento.
+              dedupeKey: type === "rise_risk" ? `rise_risk:${t.id}` : `${type}:${t.id}:${best.total}`,
+              dedupeHours: type === "rise_risk" ? 72 : 48,
               payload: { total: best.total, drop: newLow.drop },
             });
             sentType = type;

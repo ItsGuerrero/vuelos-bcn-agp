@@ -90,6 +90,26 @@ export function targetPriceMessage(opts: {
   return { text: lines.join("\n"), buttons: buyButtons(t, combo, opts.appUrl) };
 }
 
+export function riseRiskMessage(opts: {
+  tracker: TrackerInfo;
+  combo: Combo;
+  total: number;
+  lowest: number;
+  appUrl: string;
+  prediction: { probability: number; reasons: string[] };
+}): TelegramMessage {
+  const { tracker: t, combo, total } = opts;
+  const lines = [
+    `⚠️ <b>Riesgo de subida ${esc(routeTitle(t))}: ${eur(total)}</b>`,
+    total <= opts.lowest ? "Está en su precio más bajo y es probable que empiece a subir." : `Está cerca del mínimo (${eur(opts.lowest)}) y es probable que suba.`,
+    esc(`(${comboText(combo)})`),
+    `Probabilidad de que baje más: ~${opts.prediction.probability} %.`,
+    ...opts.prediction.reasons.slice(0, 3).map((r) => `• ${esc(r)}`),
+    "Recomendación: <b>comprar ya</b>.",
+  ];
+  return { text: lines.join("\n"), buttons: buyButtons(t, combo, opts.appUrl) };
+}
+
 // ---------------------------------------------------------------------
 // Ofertas flash
 // ---------------------------------------------------------------------

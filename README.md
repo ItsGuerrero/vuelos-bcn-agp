@@ -2,7 +2,7 @@
 
 Rastreador de precios de **Vueling (VY)** y **Ryanair (FR)** entre Barcelona y Málaga, pensado para una pareja a distancia. Vigila los viajes que planeamos, guarda el histórico, detecta ofertas flash y avisa por Telegram. Nunca compra: solo enlaza a la web de la aerolínea.
 
-> Estado: **fase 4** — seguimientos, avisos por Telegram y detector de ofertas flash.
+> Estado: **fase 5** — seguimientos, avisos por Telegram, detector de ofertas flash y predicción.
 
 ## Arquitectura
 
@@ -44,6 +44,19 @@ Tras cada escaneo de la ruta (`src/lib/core/flash.ts`, `src/lib/jobs/detectFlash
 - **Calentamiento**: hasta tener 4 escaneos previos por aerolínea solo funciona el chollo.
 - **Ciclo de vida**: una oferta sigue activa mientras se detecte; cuando deja de detectarse se marca como terminada y se guarda su duración.
 - **Anti-spam**: no se repite el aviso de la misma aerolínea y fechas parecidas (≥ 50 % en común) en 48 h, salvo que el precio baje más.
+
+### Predicción «¿bajará?» (heurística transparente)
+
+`src/lib/core/predict.ts`. No es un modelo entrenado: suma señales con pesos fijos y SIEMPRE devuelve los motivos.
+- Días que faltan (en las últimas 2–3 semanas casi nunca baja).
+- Precio frente a lo habitual: centro del `typical_price_range` de Google o, si no hay, mediana de nuestros escaneos de esas fechas; y el `price_level` de Google.
+- Temporada alta y festivos (Navidad, Reyes, Semana Santa, puentes, Día de Andalucía, Sant Joan, Diada, la Mercè, Feria de Málaga, verano).
+- Tendencia y volatilidad de los últimos 7 días (nuestro histórico o, si es corto, el `price_history` de Google).
+- Oferta flash activa en esas fechas (cuando termine, suele subir).
+
+Resultado: probabilidad orientativa (5–90 %), nivel Baja/Media/Alta, recomendación (Comprar ya / Vigilar de cerca / Esperar) y motivos. Aviso `rise_risk` si el precio está a ≤ 5 % del mínimo y la probabilidad de bajar es ≤ 25 % (como mucho una vez cada 3 días por seguimiento).
+
+**price_insights**: Google solo lo devuelve si NO se filtra por aerolínea, así que las búsquedas de detalle van sin `include_airlines` (el parser se queda igualmente con los directos de VY y FR). Se reutiliza hasta 72 h y se refresca como mucho una vez al día por trayecto.
 
 ### Estructura
 
@@ -129,5 +142,5 @@ npm run typecheck
 2. ✅ Web: login, pareja, listado de seguimientos, detalle y gráfica.
 3. ✅ Avisos por Telegram (`new_low`, `target_price`).
 4. ✅ Detector de ofertas flash, aviso `flash_sale` y pantalla "Ofertas".
-5. Predicción (heurística) y aviso `rise_risk`.
+5. ✅ Predicción (heurística) y aviso `rise_risk`.
 6. PWA, ajustes y retoques finales.

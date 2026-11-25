@@ -9,6 +9,13 @@ describe("semáforo provisional", () => {
   it("rojo si está bastante por encima", () => expect(trackerLight({ ...base, current: 120, lowest: 96 }).light).toBe("red"));
   it("verde si baja del objetivo aunque no sea mínimo", () =>
     expect(trackerLight({ ...base, current: 120, lowest: 96, target: 125 }).light).toBe("green"));
+  it("con predicción usa su recomendación", () => {
+    expect(trackerLight({ ...base, current: 120, lowest: 96, prediction: { recommendation: "Comprar ya", probability: 18 } })).toEqual({
+      light: "green",
+      label: "Comprar ya · baja ~18 %",
+    });
+    expect(trackerLight({ ...base, current: 96, lowest: 96, prediction: { recommendation: "Esperar", probability: 70 } }).light).toBe("red");
+  });
   it("gris si está comprado o sin datos", () => {
     expect(trackerLight({ ...base, status: "purchased", current: 1, lowest: 1 }).light).toBe("grey");
     expect(trackerLight({ ...base, current: null, lowest: null }).light).toBe("grey");

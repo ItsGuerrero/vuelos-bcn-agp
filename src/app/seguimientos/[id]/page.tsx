@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSession } from "@/lib/supabase/server";
 import { checkTotal, getCoupleProfiles, getTracker, type PriceCheck, type Tracker } from "@/lib/data";
 import type { Combo, DateMatrix } from "@/lib/core/combos";
+import type { Prediction } from "@/lib/core/predict";
 import type { Airport, Flight } from "@/lib/types";
 import { trackerLight } from "@/lib/core/light";
 import { AEROLINEA, enCuanto, eur, fechaConDia, fechaCorta, fechaHora, haceCuanto, rangoFechas } from "@/lib/format";
@@ -40,7 +41,13 @@ async function Detail({ params }: { params: PageProps<"/seguimientos/[id]">["par
   const current = last ? checkTotal(last, t.with_baggage) : null;
   const previous = checks[1] ? checkTotal(checks[1], t.with_baggage) : null;
   const lowest = t.lowest_price === null ? null : Number(t.lowest_price);
-  const light = trackerLight({ status: t.status, current, lowest, target: t.target_price === null ? null : Number(t.target_price) });
+  const light = trackerLight({
+    status: t.status,
+    current,
+    lowest,
+    target: t.target_price === null ? null : Number(t.target_price),
+    prediction: last?.prediction ?? null,
+  });
   const traveler = t.traveler_id ? profiles.find((p) => p.id === t.traveler_id)?.display_name ?? "—" : "Los dos";
 
   return (
@@ -84,6 +91,9 @@ async function Detail({ params }: { params: PageProps<"/seguimientos/[id]">["par
         )}
         {t.notes && <p className="text-sm italic text-muted">“{t.notes}”</p>}
       </section>
+
+      {/* Predicción */}
+      {t.status === "active" && last?.prediction && <PredictionCard p={last.prediction} />}
 
       {/* Combinación actual */}
       {last?.best_combo && (
@@ -134,6 +144,35 @@ async function Detail({ params }: { params: PageProps<"/seguimientos/[id]">["par
         La app nunca compra: los enlaces abren la web de la aerolínea. Los precios pueden cambiar al reservar.
       </p>
     </Page>
+  );
+}
+
+function PredictionCard({ p }: { p: Prediction }) {
+  const tone =
+    p.recommendation === "Comprar ya"
+      ? "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950"
+      : p.recommendation === "Esperar"
+        ? "border-rose-300 bg-rose-50 dark:border-rose-800 dark:bg-rose-950"
+        : "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950";
+  return (
+    <section className={`card space-y-2 ${tone}`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="font-semibold">¿Bajará?</h2>
+        <span className="text-sm">
+          Probabilidad <b>{p.level.toLowerCase()}</b> (~{p.probability} %)
+        </span>
+      </div>
+      <p className="text-lg font-bold">{p.recommendation}</p>
+      <ul className="list-disc space-y-0.5 pl-5 text-sm">
+        {p.reasons.map((r) => (
+          <li key={r}>{r}</li>
+        ))}
+      </ul>
+      <p className="text-[11px] text-muted">
+        Estimación orientativa basada en reglas (días que faltan, precio habitual, temporada, tendencia y ofertas). Nadie puede
+        predecir los precios con certeza.
+      </p>
+    </section>
   );
 }
 

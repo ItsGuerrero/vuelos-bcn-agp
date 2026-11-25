@@ -1,5 +1,6 @@
 import "server-only";
 import type { Combo, DateMatrix } from "./core/combos";
+import type { Prediction } from "./core/predict";
 import type { Airport, PriceInsights, TimeFilters } from "./types";
 import { createClient } from "./supabase/server";
 import { nowInZone } from "./core/dates";
@@ -40,7 +41,8 @@ export interface PriceCheck {
   best_combo: Combo | null;
   alternatives: Combo[] | null;
   date_matrix: DateMatrix | null;
-  insights: Partial<Record<"outbound" | "return", PriceInsights | null>> | null;
+  insights: Partial<Record<"outbound" | "return", (PriceInsights & { date?: string }) | null>> | null;
+  prediction: Prediction | null;
   errors: Array<{ where: string; message: string }> | null;
 }
 
@@ -75,7 +77,7 @@ export async function listTrackers(): Promise<TrackerSummary[]> {
   if (ids.length) {
     const { data: checks } = await supabase
       .from("price_checks")
-      .select("id, tracker_id, checked_at, providers, best_total, best_total_bags, best_combo, alternatives, errors")
+      .select("id, tracker_id, checked_at, providers, best_total, best_total_bags, best_combo, alternatives, prediction, errors")
       .in("tracker_id", ids)
       .order("checked_at", { ascending: false })
       .limit(ids.length * 6);

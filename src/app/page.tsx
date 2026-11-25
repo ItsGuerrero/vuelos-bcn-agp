@@ -80,6 +80,7 @@ function TrackerCard({ t }: { t: TrackerSummary }) {
     current: t.current,
     lowest,
     target: t.target_price === null ? null : Number(t.target_price),
+    prediction: t.lastCheck?.prediction ?? null,
   });
   const combo = t.lastCheck?.best_combo;
   const shownPrice = t.status === "purchased" ? Number(t.purchased_price) : t.current;
