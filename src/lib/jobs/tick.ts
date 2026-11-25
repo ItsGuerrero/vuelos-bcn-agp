@@ -6,13 +6,14 @@ import { currentBudget, serpCallsPerScan } from "../server/services";
 import { serverEnv } from "../server/env";
 import { scanRoute } from "./scanRoute";
 import { checkDueTrackers } from "./checkTrackers";
+import { detectFlash } from "./detectFlash";
 
 /**
  * Se ejecuta cada hora (pg_cron → POST /api/jobs/tick).
  * Decide qué toca: escaneo de la ruta en las horas configuradas y
  * comprobación de los seguimientos cuya próxima comprobación ya ha llegado.
  */
-export async function tick(db: SupabaseClient, force: { scan?: boolean; trackers?: boolean } = {}) {
+export async function tick(db: SupabaseClient, force: { scan?: boolean; trackers?: boolean; detect?: boolean } = {}) {
   const z = nowInZone();
 
   // Ajustes de escaneo: la ruta es común, así que tomamos los de la primera pareja.
@@ -39,8 +40,14 @@ export async function tick(db: SupabaseClient, force: { scan?: boolean; trackers
   if (wantScan) {
     const budget = serverEnv.serpApiKey ? await currentBudget(db, scanTimes.length, horizonDays) : null;
     const includeVueling = Boolean(budget && budget.scansRemainingToday > 0);
-    out.scan = await scanRoute(db, { horizonDays, includeVueling });
+    const scan = await scanRoute(db, { horizonDays, includeVueling });
+    out.scan = scan;
     out.scanBudget = budget;
+  }
+
+  // Detector de ofertas: justo después de cada escaneo (o si se fuerza).
+  if (wantScan || force.detect) {
+    out.flash = await detectFlash(db);
   }
 
   if (force.trackers !== false) {

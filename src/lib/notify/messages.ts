@@ -1,6 +1,7 @@
 import type { Combo } from "../core/combos";
-import type { Airport, Flight } from "../types";
-import { AEROLINEA, eur, rangoFechas } from "../format";
+import type { DetectedSale, SaleItem } from "../core/flash";
+import type { Airline, Airport, Direction, Flight } from "../types";
+import { AEROLINEA, eur, fechaCorta as fc, rangoFechas } from "../format";
 import { buyLink } from "../links";
 
 /** Mensajes de Telegram (HTML). Funciones puras para poder testearlas. */
@@ -87,4 +88,73 @@ export function targetPriceMessage(opts: {
   if (t.passengers > 1) lines.push(`Total para ${t.passengers} pasajeros.`);
   if (opts.prediction) lines.push(esc(opts.prediction));
   return { text: lines.join("\n"), buttons: buyButtons(t, combo, opts.appUrl) };
+}
+
+// ---------------------------------------------------------------------
+// Ofertas flash
+// ---------------------------------------------------------------------
+
+const MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+export function monthSpan(dates: string[]): string {
+  const sorted = [...dates].sort();
+  const m1 = Number(sorted[0].slice(5, 7)) - 1;
+  const m2 = Number(sorted[sorted.length - 1].slice(5, 7)) - 1;
+  return m1 === m2 ? `en ${MESES_LARGOS[m1]}` : `entre ${MESES_LARGOS[m1]} y ${MESES_LARGOS[m2]}`;
+}
+
+const dirLabel = (d: Direction) => d.replace("-", "→");
+
+function itemsLine(items: SaleItem[]): string {
+  return items
+    .map((i) => `${fc(i.date)} (${eur(i.price)}${i.baseline !== null ? `, suele ${eur(Math.round(i.baseline))}` : ""})`)
+    .join(", ");
+}
+
+export function airlineHome(airline: Airline) {
+  return airline === "VY" ? "https://www.vueling.com/es" : "https://www.ryanair.com/es/es";
+}
+
+export function flashSaleMessage(opts: {
+  sale: DetectedSale;
+  affected: Array<{ outbound_date: string; return_date: string | null }>;
+  thresholdPrice: number;
+  appUrl: string;
+}): TelegramMessage {
+  const { sale } = opts;
+  const name = AEROLINEA[sale.airline];
+  const dates = sale.items.map((i) => i.date);
+  const lines: string[] = [];
+  if (sale.kind === "anomaly") {
+    lines.push(`🔥 <b>Parece que ${name} tiene ofertas en BCN⇄AGP</b>`);
+    lines.push(
+      `${sale.items.length} ${sale.items.length === 1 ? "fecha" : "fechas"} ${monthSpan(dates)} han bajado una media del ${Math.round(sale.avgDropPct ?? 0)} %.`,
+    );
+  } else {
+    lines.push(`💸 <b>Chollo en ${name}</b>`);
+    lines.push(
+      `${sale.items.length} ${sale.items.length === 1 ? "trayecto" : "trayectos"} ${monthSpan(dates)} por ${eur(opts.thresholdPrice)} o menos.`,
+    );
+  }
+  lines.push("Las más baratas:");
+  for (const d of ["BCN-AGP", "AGP-BCN"] as Direction[]) {
+    if (sale.cheapest[d].length) lines.push(`• ${dirLabel(d)}: ${itemsLine(sale.cheapest[d])}`);
+  }
+  for (const t of opts.affected.slice(0, 3)) {
+    lines.push(`⚠️ Esto afecta a vuestro viaje del ${rangoFechas(t.outbound_date, t.return_date)}.`);
+  }
+
+  const first = sale.cheapest["BCN-AGP"][0] ?? sale.cheapest["AGP-BCN"][0];
+  const firstDir = sale.cheapest["BCN-AGP"][0] ? "BCN-AGP" : "AGP-BCN";
+  const [origin] = firstDir.split("-");
+  return {
+    text: lines.map((l) => (l.startsWith("🔥") || l.startsWith("💸") ? l : esc(l))).join("\n"),
+    buttons: [
+      [
+        { text: `Ver en ${name} ↗`, url: airlineHome(sale.airline) },
+        { text: "Crear seguimiento", url: `${opts.appUrl}/seguimientos/nuevo?origin=${origin}&out=${first.date}` },
+      ],
+      [{ text: "Ver ofertas en la app", url: `${opts.appUrl}/ofertas` }],
+    ],
+  };
 }

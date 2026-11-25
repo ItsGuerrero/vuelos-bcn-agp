@@ -42,6 +42,15 @@ async function NewTracker({ searchParams }: { searchParams: PageProps<"/seguimie
     notes: null,
   };
 
+  // Desde una oferta o el mapa de calor: origen y fecha de ida concretos.
+  const qOrigin = sp.origin === "BCN" || sp.origin === "AGP" ? sp.origin : null;
+  const qOut = typeof sp.out === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.out) && sp.out >= today ? sp.out : null;
+  if (qOrigin) initial.origin = qOrigin;
+  if (qOut) {
+    initial.outbound_date = qOut;
+    initial.return_date = addDays(qOut, 3);
+  }
+
   // "Repetir el viaje anterior" e "Invertir sentido" parten de otro seguimiento.
   if (from) {
     const prev = await getTracker(from);

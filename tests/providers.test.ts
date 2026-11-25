@@ -150,7 +150,11 @@ describe("fetchJson", () => {
     const r = await fetchJson("https://x", { fetchImpl: fetchImpl as typeof fetch, sleep: async (ms) => void sleeps.push(ms), baseDelayMs: 100 });
     expect(r).toEqual({ ok: 1 });
     expect(fetchImpl).toHaveBeenCalledTimes(3);
-    expect(sleeps[1]).toBeGreaterThan(sleeps[0]);
+    // Espera exponencial (100 ms, 200 ms…) más un jitter aleatorio de hasta 250 ms.
+    expect(sleeps[0]).toBeGreaterThanOrEqual(100);
+    expect(sleeps[0]).toBeLessThan(350);
+    expect(sleeps[1]).toBeGreaterThanOrEqual(200);
+    expect(sleeps[1]).toBeLessThan(450);
   });
 
   it("no reintenta errores 4xx (salvo 408/429)", async () => {

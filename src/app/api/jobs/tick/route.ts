@@ -6,13 +6,13 @@ export const maxDuration = 300;
 /**
  * Lo llama pg_cron cada hora:
  *   POST /api/jobs/tick   Authorization: Bearer <CRON_SECRET>
- * Body opcional: { "forceScan": true, "trackers": false }
+ * Body opcional: { "forceScan": true, "trackers": false, "detect": true }
  */
 export async function POST(req: Request) {
   if (!isAuthorizedCron(req)) return Response.json({ error: "No autorizado" }, { status: 401 });
-  const body = (await req.json().catch(() => ({}))) as { forceScan?: boolean; trackers?: boolean };
+  const body = (await req.json().catch(() => ({}))) as { forceScan?: boolean; trackers?: boolean; detect?: boolean };
   try {
-    const result = await tick(createAdminClient(), { scan: body.forceScan, trackers: body.trackers });
+    const result = await tick(createAdminClient(), { scan: body.forceScan, trackers: body.trackers, detect: body.detect });
     return Response.json(result);
   } catch (e) {
     console.error(e);

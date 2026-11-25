@@ -2,7 +2,7 @@
 
 Rastreador de precios de **Vueling (VY)** y **Ryanair (FR)** entre Barcelona y Málaga, pensado para una pareja a distancia. Vigila los viajes que planeamos, guarda el histórico, detecta ofertas flash y avisa por Telegram. Nunca compra: solo enlaza a la web de la aerolínea.
 
-> Estado: **fase 3** — web completa de seguimientos y avisos por Telegram.
+> Estado: **fase 4** — seguimientos, avisos por Telegram y detector de ofertas flash.
 
 ## Arquitectura
 
@@ -34,6 +34,16 @@ pg_cron (Supabase, cada hora) ──POST──▶ /api/jobs/tick (Next.js en Ver
 3. **Núcleo puro y testeable** en `src/lib/core/` (combinaciones, nuevo mínimo, frecuencia, presupuesto): sin red ni base de datos.
 4. **Precios siempre por pasajero.** Los proveedores devuelven el precio de 1 adulto y se multiplica por los pasajeros. En low-cost suele coincidir; si quedan pocas plazas podría variar ligeramente.
 5. **Nuevo mínimo con umbral acumulado**: se guarda el precio del último aviso (`notified_low`), de modo que varias bajadas de 1 € se acumulan hasta merecer un aviso.
+
+### Detector de ofertas flash
+
+Tras cada escaneo de la ruta (`src/lib/core/flash.ts`, `src/lib/jobs/detectFlash.ts`):
+- **Referencia** de cada fecha: mediana de los escaneos de los últimos 30 días para esa fecha (mín. 3); si no, mediana de fechas parecidas (mismo día de la semana, ±21 días). Calculado en SQL (`route_baselines`).
+- **Rebaja general**: para una aerolínea, ≥ 25 % de las fechas con referencia (mín. 10 fechas y 3 rebajadas) bajan ≥ 20 %. Una sola fecha que baja no cuenta.
+- **Chollo**: cualquier trayecto ≤ 20 €.
+- **Calentamiento**: hasta tener 4 escaneos previos por aerolínea solo funciona el chollo.
+- **Ciclo de vida**: una oferta sigue activa mientras se detecte; cuando deja de detectarse se marca como terminada y se guarda su duración.
+- **Anti-spam**: no se repite el aviso de la misma aerolínea y fechas parecidas (≥ 50 % en común) en 48 h, salvo que el precio baje más.
 
 ### Estructura
 
@@ -118,6 +128,6 @@ npm run typecheck
 1. ✅ Proveedores, comprobación, base de datos, seguimiento de prueba y escaneo diario (solo guarda datos).
 2. ✅ Web: login, pareja, listado de seguimientos, detalle y gráfica.
 3. ✅ Avisos por Telegram (`new_low`, `target_price`).
-4. Detector de ofertas flash, aviso `flash_sale` y pantalla "Ofertas".
+4. ✅ Detector de ofertas flash, aviso `flash_sale` y pantalla "Ofertas".
 5. Predicción (heurística) y aviso `rise_risk`.
 6. PWA, ajustes y retoques finales.
