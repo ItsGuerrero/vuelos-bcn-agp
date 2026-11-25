@@ -110,18 +110,31 @@ export class SerpApiProvider implements PriceProvider {
     return fetchJson<T>(`${ENDPOINT}?${qs}`, { retries: 1, timeoutMs: 45_000, ...this.opts.http });
   }
 
-  async searchOneWayDetailed(origin: Airport, dest: Airport, date: string, passengers = 1, airlines: Airline[] = ["VY", "FR"]) {
-    const json = await this.call<GoogleFlightsResponse>({
+  /**
+   * Detalle de un día. `filters` permite quitar el filtro de aerolíneas o de escalas
+   * (Google puede no devolver price_insights con filtros): el parser se queda igualmente
+   * solo con vuelos directos de VY y FR.
+   */
+  async searchOneWayDetailed(
+    origin: Airport,
+    dest: Airport,
+    date: string,
+    passengers = 1,
+    filters: { airlines?: Airline[] | null; nonstop?: boolean } = {},
+  ) {
+    const airlines = filters.airlines === undefined ? (["VY", "FR"] as Airline[]) : filters.airlines;
+    const nonstop = filters.nonstop ?? true;
+    const json = await this.call<GoogleFlightsResponse & { search_metadata?: { id?: string } }>({
       engine: "google_flights",
       type: "2",
       departure_id: origin,
       arrival_id: dest,
       outbound_date: date,
       adults: String(passengers),
-      stops: "1",
-      include_airlines: airlines.join(","),
+      ...(nonstop ? { stops: "1" } : {}),
+      ...(airlines && airlines.length ? { include_airlines: airlines.join(",") } : {}),
     });
-    return parseGoogleFlights(json, date, passengers);
+    return { ...parseGoogleFlights(json, date, passengers), searchId: json.search_metadata?.id ?? null };
   }
 
   async searchOneWay(origin: Airport, dest: Airport, date: string, passengers = 1): Promise<Flight[]> {

@@ -13,7 +13,7 @@ export const maxDuration = 120;
  */
 export async function POST(req: Request) {
   if (!isAuthorizedCron(req)) return Response.json({ error: "No autorizado" }, { status: 401 });
-  const body = (await req.json().catch(() => ({}))) as { serpapi?: boolean };
+  const body = (await req.json().catch(() => ({}))) as { serpapi?: boolean; insights?: boolean };
   const today = nowInZone().date;
   const date = addDays(today, 21);
   const report: Record<string, unknown> = { today, testDate: date };
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   };
 
   const fr = ryanair();
-  await probe("ryanair_calendar_90d", async () =>
+  if (!body.insights) await probe("ryanair_calendar_90d", async () =>
     (await fr.getCalendar("BCN", "AGP", today, addDays(today, 89), "FR")).filter((d) => d.price !== null),
   );
   await probe("ryanair_day", () => fr.searchOneWay("BCN", "AGP", date));
@@ -48,6 +48,23 @@ export async function POST(req: Request) {
         report.serpapi_insights = r.insights;
         return r.flights;
       });
+    }
+  }
+  // ¿Con qué filtros devuelve Google el bloque price_insights? (gasta 2 búsquedas)
+  if (body.insights) {
+    const serp = serpApi(createAdminClient(), "manual");
+    if (serp) {
+      for (const [name, filters] of [
+        ["sin_filtro_aerolinea", { airlines: null, nonstop: true }],
+        ["sin_filtros", { airlines: null, nonstop: false }],
+      ] as const) {
+        try {
+          const r = await serp.searchOneWayDetailed("BCN", "AGP", date, 1, filters);
+          report[`insights_${name}`] = { ok: true, flights: r.flights.length, insights: r.insights, searchId: r.searchId };
+        } catch (e) {
+          report[`insights_${name}`] = { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      }
     }
   }
   return Response.json(report);
