@@ -32,9 +32,10 @@ export const serverEnv = {
   },
 };
 
-/** URL pública de la app (para los enlaces de los avisos). */
+/** URL pública de la app (para los enlaces de los avisos y el webhook de Telegram). */
+export const PRODUCTION_URL = "https://frombarcelonatomalaga.vercel.app";
+
 export function appUrl(): string {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  return "https://vuelos-bcn-agp.vercel.app";
+  return PRODUCTION_URL;
 }
