@@ -7,6 +7,7 @@ import { Page, Skeleton } from "@/components/ui";
 import { UsageMeter } from "@/components/UsageMeter";
 import { signOut } from "../actions";
 import { ProfileForm } from "./ProfileForm";
+import { PasswordForm } from "./PasswordForm";
 
 export default function CuentaPage() {
   return (
@@ -32,6 +33,7 @@ async function Account() {
   return (
     <div className="space-y-4">
       <ProfileForm name={me?.display_name ?? ""} home={me?.home_airport ?? ""} />
+      <PasswordForm />
 
       <section className="card space-y-2">
         <h2 className="font-semibold">Pareja</h2>
