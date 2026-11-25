@@ -76,6 +76,20 @@ describe("Ryanair", () => {
     const flights = await p.searchOneWay("BCN", "AGP", "2027-01-07");
     expect(flights[0]).toMatchObject({ price: 49.99, depTime: "19:15", provider: "ryanair-farfnd3" });
   });
+
+  it("el plan B pide el más barato dentro de la franja horaria", async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      urls.push(String(url));
+      if (String(url).includes("availability")) return new Response("blocked", { status: 409 });
+      return Response.json({ fares: [] });
+    });
+    const p = new RyanairProvider({ fetchImpl: fetchImpl as typeof fetch, sleep: async () => {} });
+    await p.searchOneWay("BCN", "AGP", "2027-01-07", 1, { window: { after: "17:00" } });
+    const plan = new URL(urls.find((u) => u.includes("farfnd/3"))!);
+    expect(plan.searchParams.get("outboundDepartureTimeFrom")).toBe("17:00");
+    expect(plan.searchParams.has("outboundDepartureTimeTo")).toBe(false);
+  });
 });
 
 describe("SerpApi", () => {

@@ -1,4 +1,4 @@
-import type { Airport, Airline, DayPrice, Flight, PriceProvider } from "../types";
+import type { Airport, Airline, DayPrice, Flight, PriceProvider, TimeWindow } from "../types";
 import { monthsInRange } from "../core/dates";
 import { fetchJson, type FetchJsonOptions } from "./http";
 
@@ -144,8 +144,13 @@ export class RyanairProvider implements PriceProvider {
     return all;
   }
 
-  /** Precios por pasajero: se pide siempre 1 adulto y se multiplica después. */
-  async searchOneWay(origin: Airport, dest: Airport, date: string): Promise<Flight[]> {
+  /**
+   * Precios por pasajero: se pide siempre 1 adulto y se multiplica después.
+   * `window` (franja horaria) solo se usa en el plan B, que devuelve el vuelo más
+   * barato DENTRO de esa franja; la disponibilidad ya trae todos los vuelos del día.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async searchOneWay(origin: Airport, dest: Airport, date: string, _passengers = 1, opts: { window?: TimeWindow } = {}): Promise<Flight[]> {
     const params = new URLSearchParams({
       ADT: "1", CHD: "0", TEEN: "0", INF: "0", Disc: "0",
       DateOut: date, DateIn: "", Origin: origin, Destination: dest,
@@ -168,6 +173,8 @@ export class RyanairProvider implements PriceProvider {
         limit: "16",
         offset: "0",
       });
+      if (opts.window?.after) q.set("outboundDepartureTimeFrom", opts.window.after);
+      if (opts.window?.before) q.set("outboundDepartureTimeTo", opts.window.before);
       try {
         const json = await this.get<OneWayFares3Response>(`${SERVICES}/farfnd/3/oneWayFares?${q}`);
         return parseOneWayFares3(json, date);

@@ -132,8 +132,10 @@ export async function checkDueTrackers(db: SupabaseClient, opts: { maxTrackers?:
         for (const date of l.dates) {
           const list: Flight[] = [];
           try {
-            const flights = await cached(db, `ryanair:avail:${l.origin}-${l.dest}:${date}`, "ryanair", 60, () =>
-              fr.searchOneWay(l.origin, l.dest, date),
+            const window = t.time_filters?.[l.leg];
+            const wKey = window ? `:${window.after ?? ""}-${window.before ?? ""}` : "";
+            const flights = await cached(db, `ryanair:day:${l.origin}-${l.dest}:${date}${wKey}`, "ryanair", 60, () =>
+              fr.searchOneWay(l.origin, l.dest, date, 1, { window }),
             );
             list.push(...flights);
             providers.add("ryanair");

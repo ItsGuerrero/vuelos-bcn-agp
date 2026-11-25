@@ -46,7 +46,7 @@ export interface PriceProvider {
   readonly name: string;
   /** Aerolíneas que este proveedor puede devolver. */
   readonly airlines: Airline[];
-  searchOneWay(origin: Airport, dest: Airport, date: string, passengers: number): Promise<Flight[]>;
+  searchOneWay(origin: Airport, dest: Airport, date: string, passengers: number, opts?: { window?: TimeWindow }): Promise<Flight[]>;
   getCalendar(origin: Airport, dest: Airport, from: string, to: string, airline: Airline): Promise<DayPrice[]>;
 }
 
