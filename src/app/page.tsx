@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/supabase/server";
 import { getSerpApiUsage, listTrackers, type TrackerSummary } from "@/lib/data";
 import { trackerLight } from "@/lib/core/light";
-import { eur, haceCuanto, rangoFechas } from "@/lib/format";
+import { eur, fechaCorta, haceCuanto, rangoFechas } from "@/lib/format";
+import type { Flight } from "@/lib/types";
 import { AirlineBadge, Delta, Page, Semaforo, Skeleton } from "@/components/ui";
 import { UsageMeter } from "@/components/UsageMeter";
 
@@ -85,6 +86,19 @@ async function TrackerList() {
   );
 }
 
+function FlightLine({ label, f }: { label: string; f: Flight }) {
+  return (
+    <p className="flex items-center gap-2 text-sm">
+      <AirlineBadge airline={f.airline} />
+      <span className="w-12 text-muted">{label}</span>
+      <span className="text-muted">{fechaCorta(f.date)}</span>
+      <span className="ml-auto font-medium tabular-nums">
+        {f.depTime && f.arrTime ? `${f.depTime} → ${f.arrTime}` : <span className="text-xs font-normal text-muted">horario pendiente</span>}
+      </span>
+    </p>
+  );
+}
+
 function TrackerCard({ t }: { t: TrackerSummary }) {
   const lowest = t.lowest_price === null ? null : Number(t.lowest_price);
   const light = trackerLight({
@@ -116,15 +130,13 @@ function TrackerCard({ t }: { t: TrackerSummary }) {
             {t.status === "active" && <Delta current={t.current} previous={t.previous} />}
           </div>
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <Semaforo light={light.light} label={light.label} />
-          {combo && (
-            <span className="flex items-center gap-1">
-              <AirlineBadge airline={combo.outbound.airline} />
-              {combo.return && <AirlineBadge airline={combo.return.airline} />}
-            </span>
-          )}
-        </div>
+        {combo && t.status !== "purchased" && (
+          <div className="space-y-1">
+            <FlightLine label="Ida" f={combo.outbound} />
+            {combo.return && <FlightLine label="Vuelta" f={combo.return} />}
+          </div>
+        )}
+        <Semaforo light={light.light} label={light.label} />
         {t.status === "active" && (
           <p className="flex justify-between text-xs text-muted">
             <span>Mínimo: {eur(lowest)}</span>

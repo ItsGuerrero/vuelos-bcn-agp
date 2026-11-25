@@ -191,7 +191,7 @@ function LegRow({ f, label, origin, dest, passengers }: { f: Flight; label: stri
         </p>
         <p className="text-xs text-muted">
           {f.fromCalendar
-            ? `${AEROLINEA[f.airline]} · precio mínimo del día (sin detalle de horario)`
+            ? `${AEROLINEA[f.airline]} · horario pendiente (se completa en la próxima comprobación)`
             : `${f.flightNumber ?? AEROLINEA[f.airline]} · ${f.depTime ?? "?"} → ${f.arrTime ?? "?"}`}
         </p>
       </div>

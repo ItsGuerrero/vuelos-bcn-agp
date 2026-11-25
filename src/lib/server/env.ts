@@ -27,8 +27,12 @@ export const serverEnv = {
   get serpApiCalendarMaxDays() {
     return Number(process.env.SERPAPI_CALENDAR_MAX_DAYS ?? 90);
   },
+  /**
+   * Tope de búsquedas de detalle al día. El reparto mensual (core/budget.ts) ya lo limita a lo
+   * que quede: a principio de mes salen ~3/día y, si sobra presupuesto, más (hasta este tope).
+   */
   get serpApiDetailCapPerDay() {
-    return Number(process.env.SERPAPI_DETAIL_CAP_PER_DAY ?? 3);
+    return Number(process.env.SERPAPI_DETAIL_CAP_PER_DAY ?? 8);
   },
 };
 
