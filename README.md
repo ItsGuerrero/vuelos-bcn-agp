@@ -2,7 +2,7 @@
 
 Rastreador de precios de **Vueling (VY)** y **Ryanair (FR)** entre Barcelona y Málaga, pensado para una pareja a distancia. Vigila los viajes que planeamos, guarda el histórico, detecta ofertas flash y avisa por Telegram. Nunca compra: solo enlaza a la web de la aerolínea.
 
-> Estado: **fase 1** — proveedores, base de datos, escaneo diario de la ruta (solo guarda datos) y comprobación de un seguimiento de prueba.
+> Estado: **fase 3** — web completa de seguimientos y avisos por Telegram.
 
 ## Arquitectura
 
@@ -81,7 +81,19 @@ Las públicas (`NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KE
    ```
 2. El resto de `supabase/cron.sql` (URL de la app y la programación) lo puede aplicar Claude con el conector de Supabase, o tú en el mismo editor.
 
-### 4. Prueba de humo
+### 4. Bot de Telegram
+
+1. Con `TELEGRAM_BOT_TOKEN` ya en Vercel, registra el webhook (una sola vez):
+   ```bash
+   curl -X POST https://TU-APP.vercel.app/api/telegram/setup -H "Authorization: Bearer TU_CRON_SECRET"
+   ```
+   El secreto del webhook se deriva de `CRON_SECRET`, no hace falta otra variable.
+2. Cada uno entra en la web → **Cuenta** → «Conectar con Telegram» → *Iniciar* en el bot.
+3. «Enviar aviso de prueba» para comprobarlo. En el bot: `/viajes` y `/desconectar`.
+
+Los avisos van a quien viaja (o a los dos). Tipos: `new_low` (nuevo mínimo con bajada mínima de X € o X %) y `target_price` (precio objetivo). Anti-duplicados de 48 h y opción de silenciar cada seguimiento 1, 3 o 7 días.
+
+### 5. Prueba de humo
 
 ```bash
 curl -X POST https://TU-APP.vercel.app/api/jobs/smoke \
@@ -104,8 +116,8 @@ npm run typecheck
 ## Fases
 
 1. ✅ Proveedores, comprobación, base de datos, seguimiento de prueba y escaneo diario (solo guarda datos).
-2. Web: listado de seguimientos, detalle y gráfica.
-3. Avisos por Telegram (`new_low`, `target_price`).
+2. ✅ Web: login, pareja, listado de seguimientos, detalle y gráfica.
+3. ✅ Avisos por Telegram (`new_low`, `target_price`).
 4. Detector de ofertas flash, aviso `flash_sale` y pantalla "Ofertas".
 5. Predicción (heurística) y aviso `rise_risk`.
 6. PWA, ajustes y retoques finales.

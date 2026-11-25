@@ -8,6 +8,9 @@ import { UsageMeter } from "@/components/UsageMeter";
 import { signOut } from "../actions";
 import { ProfileForm } from "./ProfileForm";
 import { PasswordForm } from "./PasswordForm";
+import { TelegramCard } from "./TelegramCard";
+import { createClient } from "@/lib/supabase/server";
+import { getBotUsername } from "@/lib/notify/telegram";
 
 export default function CuentaPage() {
   return (
@@ -29,9 +32,21 @@ async function Account() {
   const [profiles, couple, usage, jobs] = await Promise.all([getCoupleProfiles(), getCouple(), getSerpApiUsage(), getRecentJobs()]);
   const me = profiles.find((p) => p.id === s.userId);
   const partner = profiles.find((p) => p.id !== s.userId);
+  const supabase = await createClient();
+  const [{ data: own }, bot] = await Promise.all([
+    supabase.from("profiles").select("telegram_link_code").eq("id", s.userId).single(),
+    getBotUsername(),
+  ]);
+  const connectUrl = bot && own?.telegram_link_code ? `https://t.me/${bot}?start=${own.telegram_link_code}` : null;
 
   return (
     <div className="space-y-4">
+      <TelegramCard
+        linked={Boolean(me?.telegram_chat_id)}
+        partnerLinked={partner ? Boolean(partner.telegram_chat_id) : null}
+        partnerName={partner?.display_name ?? null}
+        connectUrl={connectUrl}
+      />
       <ProfileForm name={me?.display_name ?? ""} home={me?.home_airport ?? ""} />
       <PasswordForm />
 

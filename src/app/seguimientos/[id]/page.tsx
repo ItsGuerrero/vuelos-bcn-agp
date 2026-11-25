@@ -9,7 +9,7 @@ import { AEROLINEA, enCuanto, eur, fechaConDia, fechaCorta, fechaHora, haceCuant
 import { buyLink } from "@/lib/links";
 import { AirlineBadge, Delta, Page, Semaforo, Skeleton } from "@/components/ui";
 import { PriceChart, type ChartPoint } from "@/components/PriceChart";
-import { CheckNowButton, MoreActions, PurchaseForm } from "@/components/TrackerActions";
+import { CheckNowButton, MoreActions, MuteControl, PurchaseForm } from "@/components/TrackerActions";
 
 export const maxDuration = 60;
 
@@ -103,6 +103,7 @@ async function Detail({ params }: { params: PageProps<"/seguimientos/[id]">["par
         <section className="space-y-2">
           <PurchaseForm id={t.id} suggested={current} />
           <CheckNowButton id={t.id} />
+          <MuteControl id={t.id} mutedUntil={t.muted_until} />
         </section>
       )}
 

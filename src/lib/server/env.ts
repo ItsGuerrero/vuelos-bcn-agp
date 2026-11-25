@@ -31,3 +31,10 @@ export const serverEnv = {
     return Number(process.env.SERPAPI_DETAIL_CAP_PER_DAY ?? 3);
   },
 };
+
+/** URL pública de la app (para los enlaces de los avisos). */
+export function appUrl(): string {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  return "https://vuelos-bcn-agp.vercel.app";
+}

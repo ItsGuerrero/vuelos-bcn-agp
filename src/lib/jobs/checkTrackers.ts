@@ -4,6 +4,10 @@ import type { Airline, Airport, BaggageByAirline, Flight, PriceInsights, TimeFil
 import { addDays, nowInZone } from "../core/dates";
 import { bestCombinations, buildDateMatrix, type Combo, type ComboOptions } from "../core/combos";
 import { evaluateNewLow } from "../core/newLow";
+import { evaluateTarget } from "../core/target";
+import { newLowMessage, targetPriceMessage } from "../notify/messages";
+import { notify } from "../notify/notifier";
+import { appUrl } from "../server/env";
 import { isExpired, nextCheckAt } from "../core/schedule";
 import { cached, ryanair, serpApi, startJob } from "../server/services";
 
@@ -22,6 +26,10 @@ interface TrackerRow {
   lowest_price: number | null;
   first_price: number | null;
   notified_low: number | null;
+  traveler_id: string | null;
+  target_price: number | null;
+  target_notified_price: number | null;
+  muted_until: string | null;
 }
 
 interface SettingsRow {
@@ -232,6 +240,7 @@ export async function checkDueTrackers(db: SupabaseClient, opts: { maxTrackers?:
         next_check_at: nextCheckAt({ today, outboundDate: t.outbound_date, customIntervalHours: t.check_interval_hours }).toISOString(),
       };
       let newLow = null;
+      let sentType: string | null = null;
       if (best) {
         newLow = evaluateNewLow({
           price: best.total,
@@ -241,15 +250,47 @@ export async function checkDueTrackers(db: SupabaseClient, opts: { maxTrackers?:
           minDropEur: Number(s?.new_low_min_drop_eur ?? 5),
           minDropPct: Number(s?.new_low_min_drop_pct ?? 3),
         });
+        const target = evaluateTarget({
+          price: best.total,
+          target: t.target_price === null ? null : Number(t.target_price),
+          notifiedPrice: t.target_notified_price === null ? null : Number(t.target_notified_price),
+          minDropEur: Number(s?.new_low_min_drop_eur ?? 5),
+        });
         update.lowest_price = newLow.lowest;
         if (newLow.isHistoricLow) update.lowest_price_at = new Date().toISOString();
         if (t.first_price === null) update.first_price = best.total;
-        // Fase 3: aquí se enviará el aviso de Telegram cuando newLow.notify sea true.
         update.notified_low = newLow.notifiedLow;
+        update.target_notified_price = target.notifiedPrice;
+
+        // Avisos (si el seguimiento no está silenciado). Si coinciden los dos, se manda solo el de objetivo.
+        const muted = t.muted_until !== null && new Date(t.muted_until) > new Date();
+        const info = { ...t, target_price: t.target_price === null ? null : Number(t.target_price) };
+        const message = target.notify
+          ? targetPriceMessage({ tracker: info, combo: best, total: best.total, isNewLow: newLow.isHistoricLow && !newLow.isFirstCheck, appUrl: appUrl() })
+          : newLow.notify
+            ? newLowMessage({ tracker: info, combo: best, total: best.total, drop: newLow.drop, appUrl: appUrl() })
+            : null;
+        if (message && !muted) {
+          const type = target.notify ? "target_price" : "new_low";
+          try {
+            await notify(db, {
+              coupleId: t.couple_id,
+              type,
+              message,
+              travelerId: t.traveler_id,
+              trackerId: t.id,
+              dedupeKey: `${type}:${t.id}:${best.total}`,
+              payload: { total: best.total, drop: newLow.drop },
+            });
+            sentType = type;
+          } catch (e) {
+            errors.push({ where: `aviso ${type}`, message: e instanceof Error ? e.message : String(e) });
+          }
+        }
       }
       await db.from("trackers").update(update).eq("id", t.id);
 
-      results.push({ tracker: t.id, best: best?.total ?? null, newLow: newLow?.notify ?? false, errors: errors.length });
+      results.push({ tracker: t.id, best: best?.total ?? null, notified: sentType, errors: errors.length });
       for (const e of errors) job.logError(`${t.id} ${e.where}`, e.message);
     } catch (e) {
       job.logError(`tracker ${t.id}`, e);

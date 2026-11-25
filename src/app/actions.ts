@@ -232,3 +232,37 @@ export async function deleteTracker(id: string) {
   revalidatePath("/");
   redirect("/");
 }
+
+// ---------------------------------------------------------------------
+// Telegram y silenciar avisos
+// ---------------------------------------------------------------------
+export async function sendTestTelegram(): Promise<ActionState> {
+  const s = await requireCouple();
+  const { data } = await createAdminClient().from("profiles").select("telegram_chat_id").eq("id", s.userId).single();
+  if (!data?.telegram_chat_id) return { error: "Aún no has conectado Telegram" };
+  const { sendMessage } = await import("@/lib/notify/telegram");
+  try {
+    await sendMessage(
+      Number(data.telegram_chat_id),
+      "🔔 <b>Aviso de prueba</b>\nAsí te llegarán los avisos de bajadas de precio. ¡Todo funciona!",
+    );
+    return { ok: "Mensaje enviado" };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export async function unlinkTelegram() {
+  const s = await requireCouple();
+  // Los campos de Telegram solo los puede tocar el backend (ver migración profiles_column_grants).
+  await createAdminClient().from("profiles").update({ telegram_chat_id: null }).eq("id", s.userId);
+  revalidatePath("/cuenta");
+}
+
+export async function muteTracker(id: string, days: number) {
+  await requireCouple();
+  const supabase = await createClient();
+  const until = days > 0 ? new Date(Date.now() + days * 86_400_000).toISOString() : null;
+  await supabase.from("trackers").update({ muted_until: until }).eq("id", id);
+  revalidatePath(`/seguimientos/${id}`);
+}

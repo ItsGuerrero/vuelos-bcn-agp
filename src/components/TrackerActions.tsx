@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
-import { checkNow, deleteTracker, markPurchased, setTrackerStatus, type ActionState } from "@/app/actions";
+import { checkNow, deleteTracker, markPurchased, muteTracker, setTrackerStatus, type ActionState } from "@/app/actions";
 
 export function CheckNowButton({ id }: { id: string }) {
   const [pending, start] = useTransition();
@@ -88,6 +88,31 @@ export function MoreActions({ id, status }: { id: string; status: string }) {
       >
         {confirmDelete ? "Pulsa otra vez para borrar (se pierde el histórico)" : "Borrar seguimiento"}
       </button>
+    </div>
+  );
+}
+
+export function MuteControl({ id, mutedUntil }: { id: string; mutedUntil: string | null }) {
+  const [pending, start] = useTransition();
+  const muted = mutedUntil !== null && new Date(mutedUntil) > new Date();
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-muted">
+        {muted
+          ? `🔕 Avisos silenciados hasta el ${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(mutedUntil!))}`
+          : "🔔 Silenciar avisos:"}
+      </span>
+      {muted ? (
+        <button className="chip" disabled={pending} onClick={() => start(() => muteTracker(id, 0))}>
+          Reactivar
+        </button>
+      ) : (
+        [1, 3, 7].map((d) => (
+          <button key={d} className="chip" disabled={pending} onClick={() => start(() => muteTracker(id, d))}>
+            {d} {d === 1 ? "día" : "días"}
+          </button>
+        ))
+      )}
     </div>
   );
 }

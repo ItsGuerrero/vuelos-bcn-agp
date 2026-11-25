@@ -26,6 +26,7 @@ export interface Tracker {
   purchased_price: number | null;
   purchased_at: string | null;
   notes: string | null;
+  muted_until: string | null;
   created_at: string;
 }
 
