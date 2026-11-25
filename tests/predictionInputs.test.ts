@@ -69,7 +69,32 @@ describe("entradas de la predicción", () => {
       nowMs: now,
     });
     expect(i.typicalPerPerson).toBe(130);
-    expect(i.typicalSource).toBe("scans");
+    expect(i.typicalSource).toBe("mixed");
+  });
+
+  it("para la predicción no usa «fechas parecidas» (engañan en festivos)", () => {
+    const rows: BaselineRow[] = [
+      { direction: "AGP-BCN", airline: "FR", date: "2027-01-14", median: 25, n: 5 },
+      { direction: "AGP-BCN", airline: "FR", date: "2027-01-21", median: 25, n: 5 },
+    ];
+    expect(scansTypical("AGP-BCN", "2027-01-07", rows)).toBeNull();
+    expect(scansTypical("AGP-BCN", "2027-01-07", rows, false)).toBe(25);
+  });
+
+  it("si solo hay referencia de la ida, compara solo la ida", () => {
+    const i = buildPredictionInput({
+      today: "2026-11-25",
+      tracker,
+      best,
+      insights: { outbound: ins("2027-01-01", [20, 40]) },
+      previous: [],
+      baselineRows: [],
+      activeFlashSale: null,
+      nowMs: now,
+    });
+    expect(i.typicalPerPerson).toBe(30);
+    expect(i.comparablePerPerson).toBe(33);
+    expect(i.typicalScope).toBe("la ida");
   });
 
   it("sin ninguna referencia, typical es null", () => {

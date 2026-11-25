@@ -34,13 +34,18 @@ export function freshInsight(
   return null;
 }
 
-/** Precio habitual de un trayecto según nuestros escaneos (el más barato de las dos aerolíneas). */
-export function scansTypical(direction: Direction, date: string, rows: BaselineRow[]): number | null {
+/**
+ * Precio habitual de un trayecto según nuestros escaneos (el más barato de las dos aerolíneas).
+ * Para la predicción solo vale la referencia de la MISMA fecha: las "fechas parecidas" engañan
+ * en festivos (p. ej. el 7 de enero no se parece a los demás jueves de enero).
+ */
+export function scansTypical(direction: Direction, date: string, rows: BaselineRow[], sameDateOnly = true): number | null {
   const pts: ScanPoint[] = (["VY", "FR"] as Airline[]).map((airline) => ({ direction, airline, date, price: 0 }));
   const b = computeBaselines(pts, rows);
   const vals = (["VY", "FR"] as Airline[])
-    .map((a) => b.get(`${direction}|${a}|${date}`)?.value)
-    .filter((v): v is number => typeof v === "number");
+    .map((a) => b.get(`${direction}|${a}|${date}`))
+    .filter((v) => v && (!sameDateOnly || v.source === "same_date"))
+    .map((v) => v!.value);
   return vals.length ? Math.min(...vals) : null;
 }
 
@@ -61,25 +66,34 @@ export function buildPredictionInput(opts: {
     ...(best.return ? [{ leg: "return" as const, f: best.return, dir: `${t.destination}-${t.origin}` as Direction }] : []),
   ];
 
-  // Precio habitual: Google (centro del rango típico) o, si no, la mediana de nuestros escaneos.
+  // Precio habitual: Google (centro del rango típico) o, si no, la mediana de nuestros escaneos
+  // de esa misma fecha. Solo se comparan los trayectos de los que hay referencia.
   let typical = 0;
-  let allGoogle = true;
-  let missing = false;
+  let comparable = 0;
+  let fromGoogle = 0;
+  let fromScans = 0;
+  const covered: string[] = [];
   const levels: string[] = [];
   const histories: Array<Array<[number, number]>> = [];
   for (const l of legs) {
     const ins = freshInsight(opts.insights, opts.previous, l.leg, l.f.date, 72, nowMs);
     if (ins?.priceLevel) levels.push(ins.priceLevel);
     if (ins?.priceHistory?.length) histories.push(ins.priceHistory);
+    let ref: number | null = null;
     if (ins?.typicalPriceRange) {
-      typical += (ins.typicalPriceRange[0] + ins.typicalPriceRange[1]) / 2;
-      continue;
+      ref = (ins.typicalPriceRange[0] + ins.typicalPriceRange[1]) / 2;
+      fromGoogle++;
+    } else {
+      ref = scansTypical(l.dir, l.f.date, opts.baselineRows);
+      if (ref !== null) fromScans++;
     }
-    allGoogle = false;
-    const s = scansTypical(l.dir, l.f.date, opts.baselineRows);
-    if (s === null) missing = true;
-    else typical += s;
+    if (ref === null) continue;
+    typical += ref;
+    comparable += l.f.price;
+    covered.push(l.leg);
   }
+  const partial = covered.length > 0 && covered.length < legs.length;
+  const typicalSource = !covered.length ? null : fromScans === 0 ? "google" : fromGoogle === 0 ? "scans" : "mixed";
 
   // Histórico: el nuestro (por persona) y, si aún es corto, el price_history de Google.
   let history = opts.previous
@@ -103,8 +117,10 @@ export function buildPredictionInput(opts: {
     outboundDate: best.outbound.date,
     tripDates: legs.map((l) => l.f.date),
     currentPerPerson: legs.reduce((s, l) => s + l.f.price, 0),
-    typicalPerPerson: missing ? null : Math.round(typical * 100) / 100,
-    typicalSource: missing ? null : allGoogle ? "google" : "scans",
+    typicalPerPerson: covered.length ? Math.round(typical * 100) / 100 : null,
+    comparablePerPerson: covered.length ? Math.round(comparable * 100) / 100 : undefined,
+    typicalScope: partial ? (covered[0] === "outbound" ? "la ida" : "la vuelta") : undefined,
+    typicalSource,
     googleLevel: level,
     history,
     activeFlashSale: opts.activeFlashSale,

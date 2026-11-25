@@ -19,7 +19,11 @@ export interface PredictionInput {
   currentPerPerson: number;
   /** Precio habitual para esas mismas fechas (por persona), si se conoce. */
   typicalPerPerson: number | null;
-  typicalSource: "google" | "scans" | null;
+  typicalSource: "google" | "scans" | "mixed" | null;
+  /** Precio actual de los trayectos que tienen referencia (si no se da, currentPerPerson). */
+  comparablePerPerson?: number;
+  /** Si la referencia solo cubre un trayecto: "la ida" o "la vuelta". */
+  typicalScope?: string;
   /** price_level de Google ("low" | "typical" | "high"), si lo hay. */
   googleLevel: string | null;
   /** Histórico propio: totales comparables ordenados por fecha. */
@@ -79,9 +83,12 @@ export function predict(i: PredictionInput, nowMs = Date.now()): Prediction {
   else add(+10, `${daysText(d)}: queda mucho y los precios aún se moverán`);
 
   // 2. Precio frente a lo habitual.
+  const comparable = i.comparablePerPerson ?? i.currentPerPerson;
   if (i.typicalPerPerson && i.typicalPerPerson > 0) {
-    const diff = (i.currentPerPerson - i.typicalPerPerson) / i.typicalPerPerson;
-    const fuente = i.typicalSource === "google" ? "según Google" : "según nuestros escaneos";
+    const diff = (comparable - i.typicalPerPerson) / i.typicalPerPerson;
+    const fuente =
+      (i.typicalSource === "google" ? "según Google" : i.typicalSource === "mixed" ? "según Google y nuestros escaneos" : "según nuestros escaneos") +
+      (i.typicalScope ? `, en ${i.typicalScope}` : "");
     if (diff <= -0.15) add(-15, `el precio está un ${pctText(diff)} por debajo de lo normal (${fuente})`);
     else if (diff <= -0.05) add(-7, `el precio está un ${pctText(diff)} por debajo de lo normal (${fuente})`);
     else if (diff < 0.05) add(0, `el precio está en lo normal (${fuente})`);
@@ -119,7 +126,7 @@ export function predict(i: PredictionInput, nowMs = Date.now()): Prediction {
 
   let recommendation: Recommendation = probability < 30 ? "Comprar ya" : probability <= 55 ? "Vigilar de cerca" : "Esperar";
   // Si está claramente caro y aún queda tiempo, no empujamos a comprar.
-  if (recommendation === "Comprar ya" && i.typicalPerPerson && i.currentPerPerson > i.typicalPerPerson * 1.2 && d > 21) {
+  if (recommendation === "Comprar ya" && i.typicalPerPerson && comparable > i.typicalPerPerson * 1.2 && d > 21) {
     recommendation = "Vigilar de cerca";
   }
 
